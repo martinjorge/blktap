@@ -38,6 +38,7 @@
 #include "tapdisk-driver.h"
 #include "tapdisk-server.h"
 #include "tapdisk-vbd.h"
+#include "tapdisk-metrics.h"
 #include "tapdisk-disktype.h"
 #include "tapdisk-interface.h"
 #include "tapdisk-stats.h"
@@ -236,6 +237,11 @@ tapdisk_vbd_close_vdi(td_vbd_t *vbd)
     if (err) {
         EPRINTF("failed to destroy RRD stats file: %s (error ignored)\n",
                 strerror(-err));
+    }
+
+    err = td_metrics_vdi_stop(&vbd->vdi_stats);
+    if (err) {
+        EPRINTF("failed to destroy stats file: %s\n", strerror(-err));
     }
 
 	tapdisk_image_close_chain(&vbd->images);
@@ -602,6 +608,10 @@ tapdisk_vbd_open_vdi(td_vbd_t *vbd, const char *name, td_flag_t flags, int prt_d
 	}
 
     err = vbd_stats_create(vbd);
+    if (err)
+        goto fail;
+
+    err = td_metrics_vdi_start(vbd->tap->minor, &vbd->vdi_stats);
     if (err)
         goto fail;
 

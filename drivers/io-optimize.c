@@ -28,6 +28,7 @@
 
 #include "io-optimize.h"
 #include "tapdisk-log.h"
+#include "tapdisk-metrics.h"
 
 #if (!defined(TEST) && defined(DEBUG))
 #define DBG(ctx, f, a...) tlog_write(TLOG_DBG, f, ##a)
@@ -189,6 +190,8 @@ merge_tail(struct opioctx *ctx, struct iocb *head, struct iocb *io)
 	head->u.c.nbytes += io->u.c.nbytes;
 	ophead->list.tail = ophead->list.tail->next = opio;
 	
+        //td_metrics_vdi_update_merged(io);
+
 	return 0;
 }
 

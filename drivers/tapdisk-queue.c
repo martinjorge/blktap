@@ -21,6 +21,7 @@
 
 #include <errno.h>
 #include <stdlib.h>
+#include <sys/time.h>
 #include <unistd.h>
 #include <libaio.h>
 #ifdef __linux__
@@ -33,6 +34,7 @@
 #include "tapdisk-filter.h"
 #include "tapdisk-server.h"
 #include "tapdisk-utils.h"
+#include "tapdisk-metrics.h"
 
 #include "libaio-compat.h"
 #include "atomicio.h"
@@ -448,7 +450,7 @@ tapdisk_lio_event(event_id_t id, char mode, void *private)
 			     queue->size, lio->aio_events, NULL);
 	split = io_split(&queue->opioctx, lio->aio_events, ret);
 	tapdisk_filter_events(queue->filter, lio->aio_events, split);
-
+        td_metrics_vdi_update_completed(lio->aio_events, split);
 	DBG("events: %d, tiocbs: %d\n", ret, split);
 
 	queue->iocbs_pending  -= ret;
@@ -501,15 +503,20 @@ static int
 tapdisk_lio_submit(struct tqueue *queue)
 {
 	struct lio *lio = queue->tio_data;
-	int merged, submitted, err = 0;
+	int nreqs, merged, submitted, err = 0;
 
 	if (!queue->queued)
 		return 0;
 
-	tapdisk_filter_iocbs(queue->filter, queue->iocbs, queue->queued);
-	merged    = io_merge(&queue->opioctx, queue->iocbs, queue->queued);
-	tapdisk_lio_set_eventfd(queue, merged, queue->iocbs);
-	submitted = io_submit(lio->aio_ctx, merged, queue->iocbs);
+        tapdisk_filter_iocbs(queue->filter, queue->iocbs, queue->queued);
+        /* nreqs = number of requests that will be submitted after merging */
+        nreqs = io_merge(&queue->opioctx, queue->iocbs, queue->queued);
+        /* merged = number of actual merged requests */
+        merged = queue->queued - nreqs;
+        tapdisk_lio_set_eventfd(queue, nreqs, queue->iocbs);
+        /* submitted = number of requests eventually submitted */
+        td_metrics_vdi_update_submit(queue->iocbs, nreqs); //timestamp tiocb!
+        submitted = io_submit(lio->aio_ctx, nreqs, queue->iocbs);
 
 	DBG("queued: %d, merged: %d, submitted: %d\n",
 	    queue->queued, merged, submitted);
@@ -517,7 +524,7 @@ tapdisk_lio_submit(struct tqueue *queue)
 	if (submitted < 0) {
 		err = submitted;
 		submitted = 0;
-	} else if (submitted < merged)
+	} else if (submitted < nreqs)
 		err = -EIO;
 
 	queue->iocbs_pending  += submitted;
@@ -526,9 +533,9 @@ tapdisk_lio_submit(struct tqueue *queue)
 
 	if (err)
 		queue->tiocbs_pending -= 
-			fail_tiocbs(queue, submitted, merged, err);
+			fail_tiocbs(queue, submitted, nreqs, err);
 
-	return submitted;
+        return submitted;
 }
 
 static const struct tio td_tio_lio = {

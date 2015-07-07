@@ -55,6 +55,7 @@
 #include "tapdisk-log.h"
 #include "tapdisk-utils.h"
 #include "tapdisk-stats.h"
+#include "tapdisk-metrics.h"
 
 extern unsigned int PAGE_SIZE;
 extern unsigned int PAGE_MASK;

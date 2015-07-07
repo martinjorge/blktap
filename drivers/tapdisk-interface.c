@@ -30,6 +30,8 @@
 #include "tapdisk-server.h"
 #include "tapdisk-interface.h"
 #include "tapdisk-log.h"
+#include "block-aio.h"
+#include "block-vhd.c"
 
 int
 td_load(td_image_t *image)
@@ -234,9 +236,23 @@ td_complete_request(td_request_t treq, int res)
 }
 
 void
+td_setup_tiocb_stats(const char *disk_type, struct tiocb *tiocb){
+
+    if(strcmp(disk_type, "tapdisk_aio") == 0){
+        struct aio_request *aio = (struct aio_request *)tiocb->arg;
+        tiocb->vdi_stats = &aio->treq.vreq->vbd->vdi_stats;
+    }else if(strcmp(disk_type, "tapdisk_vhd") == 0){
+        struct vhd_request *vhd = (struct vhd_request *)tiocb->arg;
+        tiocb->vdi_stats = &vhd->treq.vreq->vbd->vdi_stats;
+    }
+
+}
+
+void
 td_queue_tiocb(td_driver_t *driver, struct tiocb *tiocb)
 {
-	tapdisk_driver_queue_tiocb(driver, tiocb);
+	td_setup_tiocb_stats(driver->ops->disk_type, tiocb);
+        tapdisk_driver_queue_tiocb(driver, tiocb);
 }
 
 void

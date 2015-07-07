@@ -28,13 +28,14 @@ struct tfilter;
 
 typedef void (*td_queue_callback_t)(void *arg, struct tiocb *, int err);
 
-
 struct tiocb {
 	td_queue_callback_t   cb;
 	void                 *arg;
 
 	struct iocb           iocb;
 	struct tiocb         *next;
+        struct timeval        ts;
+        stats_t              *vdi_stats;
 };
 
 struct tlist {
