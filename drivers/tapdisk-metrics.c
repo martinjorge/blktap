@@ -357,4 +357,55 @@ td_metrics_blktap_stop(stats_t *blktap_stats)
     blktap_stats->shm.path = NULL;
 }
 
+int
+td_metrics_nbd_start(stats_t *nbd_stats, int minor)
+{
+    int err = 0;
+
+    ASSERT(td_metrics.path);
+
+    if(nbd_stats->shm.path != NULL)
+        goto out;
+
+    shm_init(&nbd_stats->shm);
+
+    err = asprintf(&nbd_stats->shm.path, TAPDISK_METRICS_NBD_PATHF, td_metrics.path, minor);
+    if(unlikely(err == -1)){
+        err = errno;
+        EPRINTF("failed to allocate memory to store NBD metrics path: %s\n",strerror(err));
+        nbd_stats->shm.path = NULL;
+        goto out;
+    }
+
+    nbd_stats->shm.size = PAGE_SIZE;
+
+    err = shm_create(&nbd_stats->shm);
+    if (unlikely(err)) {
+        err = errno;
+        EPRINTF("failed to create NBD shm ring stats file: %s\n", strerror(err));
+        goto out;
+   }
+    nbd_stats->stats = nbd_stats->shm.mem;
+out:
+    return err;
+}
+
+int
+td_metrics_nbd_stop(stats_t *nbd_stats)
+{
+    int err = 0;
+
+    ASSERT(nbd_stats->shm.path);
+
+    err = shm_destroy(&nbd_stats->shm);
+    if (unlikely(err)) {
+        err = errno;
+        EPRINTF("failed to destroy NBD metrics file: %s\n", strerror(err));
+    }
+
+    free(nbd_stats->shm.path);
+    nbd_stats->shm.path = NULL;
+
+    return err;
+}
 
